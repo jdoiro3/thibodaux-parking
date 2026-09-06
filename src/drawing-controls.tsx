@@ -7,7 +7,7 @@ type DrawingControlsProps = {
     draw: TerraDraw | null;
 };
 
-const DEFAULT_MODE: TerraDrawModeId = 'point';
+const DEFAULT_MODE: TerraDrawModeId = 'rectangle';
 
 const DrawingControls = ({ draw }: DrawingControlsProps) => {
     const [activeMode, setActiveMode] = React.useState<TerraDrawModeId>('static');
@@ -64,14 +64,6 @@ const DrawingControls = ({ draw }: DrawingControlsProps) => {
                         {button.label}
                     </button>
                 ))}
-                {/* 🔍 ADD THIS BUTTON: Clears the drawing focus to restore map polygon hovers */}
-                <button
-                    type="button"
-                    className={`terra-draw-button ${activeMode === 'static' ? 'active' : ''}`}
-                    onClick={() => handleModeChange('static')}
-                    disabled={!draw}>
-                    👁️ Inspect Map (Hover)
-                </button>
             </div>
             <div className="terra-draw-toolbar-row">
                 <button

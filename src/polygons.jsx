@@ -19,15 +19,14 @@ function HoverablePolygon({ polygon, onHoverChange }) {
                 strokeOpacity={1}
                 strokeWeight={2}
                 clickable
-                onMouseover={(e) => {
-                    console.log(e);
+                onMouseOver={(e) => {
                     setIsHovered(true);
                     // e.latLng is a Google LatLng object; call toJSON() safely if available
                     const latLng = e.latLng ? e.latLng.toJSON() : null;
                     setHoverPosition(latLng);
                     onHoverChange(acres);
                 }}
-                onMouseout={() => {
+                onMouseOut={() => {
                     setIsHovered(false);
                     setHoverPosition(null);
                     onHoverChange(0);

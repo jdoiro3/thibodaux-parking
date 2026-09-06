@@ -10,6 +10,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@turf/area": "^7.4.0",
+    "@turf/helpers": "^7.4.0",
+    "@turf/intersect": "^7.4.0",
+    "@turf/union": "^7.4.0",
     "@vis.gl/react-google-maps": "^1.9.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
