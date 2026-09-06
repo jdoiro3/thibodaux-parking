@@ -23,7 +23,7 @@ import { intersect } from "@turf/intersect";
 import { union } from "@turf/union";
 
 const THIBODAUX = { lat: 29.7958, lng: -90.8195 };
-const GEOJSON_URL = "/data/thib-parking-lots.geojson";
+const GEOJSON_URL = `${import.meta.env.BASE_URL}data/thib-parking-lots.geojson`;
 
 const SQ_METERS_PER_ACRE = 4046.8564224;
 
