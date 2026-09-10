@@ -1,26 +1,32 @@
-import * as React from 'react';
+import { useState, useRef, useEffect, memo } from 'react';
 import type { TerraDraw } from 'terra-draw';
 
 import { DRAWING_MODE_BUTTONS, TerraDrawModeId } from './terra-draw-config';
 
 type DrawingControlsProps = {
     draw: TerraDraw | null;
+    analysisEnabled: boolean;
+    onAnalysisEnabledChange: (enabled: boolean) => void;
 };
 
 const DEFAULT_MODE: TerraDrawModeId = 'rectangle';
 
-const DrawingControls = ({ draw }: DrawingControlsProps) => {
-    const [activeMode, setActiveMode] = React.useState<TerraDrawModeId>('static');
-    const isInitializedRef = React.useRef(false);
+const DrawingControls = ({
+    draw,
+    analysisEnabled,
+    onAnalysisEnabledChange,
+}: DrawingControlsProps) => {
+    const [activeMode, setActiveMode] =
+        useState<TerraDrawModeId>('static');
 
-    React.useEffect(() => {
+    const isInitializedRef = useRef(false);
+
+    useEffect(() => {
         if (!draw || isInitializedRef.current) return;
 
-        // Set your initial drawing mode state safely exactly once
         draw.setMode(DEFAULT_MODE);
         setActiveMode(DEFAULT_MODE);
 
-        // Mark as complete so this block locks and never auto-fires again
         isInitializedRef.current = true;
     }, [draw]);
 
@@ -52,37 +58,56 @@ const DrawingControls = ({ draw }: DrawingControlsProps) => {
 
     return (
         <div className="terra-draw-toolbar-group">
+
             <div className="terra-draw-toolbar-row">
                 {DRAWING_MODE_BUTTONS.map(button => (
                     <button
                         key={button.id}
                         type="button"
-                        className={`terra-draw-button ${activeMode === button.id ? 'active' : ''
-                            }`}
+                        className={`terra-draw-button ${
+                            activeMode === button.id ? 'active' : ''
+                        }`}
                         onClick={() => handleModeChange(button.id)}
-                        disabled={!draw}>
+                        disabled={!draw}
+                    >
                         {button.label}
                     </button>
                 ))}
             </div>
+
             <div className="terra-draw-toolbar-row">
                 <button
                     type="button"
                     className="terra-draw-button"
                     onClick={handleDeleteLast}
-                    disabled={!draw}>
+                    disabled={!draw}
+                >
                     Delete Last
                 </button>
+
                 <button
                     type="button"
                     className="terra-draw-button"
                     onClick={handleClear}
-                    disabled={!draw}>
+                    disabled={!draw}
+                >
                     Clear All
                 </button>
             </div>
+
+            <label className="terra-draw-toggle">
+                <input
+                    type="checkbox"
+                    checked={analysisEnabled}
+                    onChange={e =>
+                        onAnalysisEnabledChange(e.target.checked)
+                    }
+                />
+                Calculations & routing
+            </label>
+
         </div>
     );
 };
 
-export default React.memo(DrawingControls);
+export default memo(DrawingControls);

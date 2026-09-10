@@ -13,12 +13,12 @@ import GeoJsonControls from "./geojson-controls";
 import TerraDrawLayer from "./terra-draw-layer";
 import "./terra-draw.css";
 
-import { ParkingLayer } from "./polygons";
+import { ParkingLayer, parkingPolygonToTurf } from "./polygons";
 import { areaAcres } from "./utils";
 import { TerraDrawWalkingDistance } from './walking-distance'
 
 import turfArea from "@turf/area";
-import { polygon as turfPolygon, multiPolygon, featureCollection } from "@turf/helpers";
+import { featureCollection } from "@turf/helpers";
 import { intersect } from "@turf/intersect";
 import { union } from "@turf/union";
 
@@ -98,60 +98,6 @@ function extractPolygons(geojson) {
 
 
 /* ============================================================
-   GOOGLE MAPS POLYGON → TURF POLYGON
-   ============================================================ */
-
-function parkingPolygonToTurf(parkingPolygon) {
-    if (!parkingPolygon?.paths?.length) {
-        return null;
-    }
-
-    /*
-     * paths[0] = outer ring
-     * paths[1+] = holes
-     */
-    const rings = parkingPolygon.paths.map((ring) => {
-        const coordinates = ring.map(({ lng, lat }) => [
-            lng,
-            lat,
-        ]);
-
-        /*
-         * Turf requires closed rings.
-         */
-        if (coordinates.length > 0) {
-            const first = coordinates[0];
-            const last = coordinates[coordinates.length - 1];
-
-            if (
-                first[0] !== last[0] ||
-                first[1] !== last[1]
-            ) {
-                coordinates.push([...first]);
-            }
-        }
-
-        return coordinates;
-    });
-
-    if (!rings[0] || rings[0].length < 4) {
-        return null;
-    }
-
-    try {
-        return turfPolygon(rings);
-    } catch (error) {
-        console.warn(
-            "Unable to convert parking polygon to Turf:",
-            error
-        );
-
-        return null;
-    }
-}
-
-
-/* ============================================================
    COMBINE PARKING POLYGONS
    ============================================================ */
 
@@ -211,8 +157,14 @@ function TerraDrawAnalysis({
     draw,
     parkingPolygons,
     onAnalysis,
+    analysisEnabled
 }) {
     useEffect(() => {
+        if (!analysisEnabled) {
+            onAnalysis(null);
+            return;
+        }
+
         if (!draw) return;
 
         let calculating = false;
@@ -403,7 +355,12 @@ function TerraDrawAnalysis({
             draw.off("change", handleChange);
             draw.off("finish", handleFinish);
         };
-    }, [draw, parkingPolygons, onAnalysis]);
+    }, [
+        draw,
+        parkingPolygons,
+        analysisEnabled,
+        onAnalysis
+    ]);
 
     return null;
 }
@@ -483,7 +440,7 @@ function AnalysisCard({
                 TERRA DRAW AREA ANALYSIS
                 ============================================ */}
 
-            {analysis.hasSelection && (
+            {analysis?.hasSelection && (
                 <div
                     style={{
                         marginTop: "14px",
@@ -585,7 +542,7 @@ function AnalysisCard({
                 WALKING DISTANCE
                 ============================================ */}
 
-            {walkingDistance.hasRoute && (
+            {walkingDistance?.hasRoute && (
                 <div
                     style={{
                         marginTop: "14px",
@@ -653,8 +610,14 @@ function AnalysisCard({
 
 function AppContent() {
     const [geoJsonLoaded, setGeoJsonLoaded] = useState(false);
-
     const [polygons, setPolygons] = useState([]);
+    const handleGeoJsonImport = (geojson) => {
+        const importedPolygons = extractPolygons(geojson);
+
+        setPolygons(importedPolygons);
+    };
+    const [analysisEnabled, setAnalysisEnabled] = useState(false);
+    const [hoveredArea, setHoveredArea] = useState(0);
 
     const [drawAnalysis, setDrawAnalysis] = useState({
         drawnAcres: 0,
@@ -663,10 +626,7 @@ function AppContent() {
         hasSelection: false,
     });
 
-    const [hoveredArea, setHoveredArea] = useState(0);
-
-    const [walkingDistance, setWalkingDistance] =
-        useState({
+    const [walkingDistance, setWalkingDistance] = useState({
             distanceMeters: 0,
             durationSeconds: 0,
             path: [],
@@ -768,13 +728,13 @@ function AppContent() {
                             draw={draw}
                             parkingPolygons={polygons}
                             onAnalysis={setDrawAnalysis}
+                            analysisEnabled={analysisEnabled}
                         />
 
                         <TerraDrawWalkingDistance
                             draw={draw}
-                            onWalkingDistance={
-                                setWalkingDistance
-                            }
+                            onWalkingDistance={setWalkingDistance}
+                            analysisEnabled={analysisEnabled}
                         />
 
                         <MapControl
@@ -785,10 +745,16 @@ function AppContent() {
                             <div className="terra-draw-toolbar">
                                 <DrawingControls
                                     draw={draw}
+                                    analysisEnabled={analysisEnabled}
+                                    onAnalysisEnabledChange={setAnalysisEnabled}
                                 />
 
                                 <GeoJsonControls
                                     draw={draw}
+                                    polygons={polygons}
+                                    onImport={handleGeoJsonImport}
+                                    analysisEnabled={analysisEnabled}
+                                    onAnalysisEnabledChange={setAnalysisEnabled}
                                 />
                             </div>
                         </MapControl>
@@ -796,8 +762,8 @@ function AppContent() {
                 )}
             </TerraDrawLayer>
 
-            {walkingDistance.hasRoute &&
-                walkingDistance.path.length > 1 && (
+            {walkingDistance?.hasRoute &&
+                walkingDistance?.path.length > 1 && (
                     <>
                         <Polyline
                             path={walkingDistance.path}

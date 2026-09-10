@@ -4,8 +4,14 @@ import { useEffect, useMemo, useState } from "react";
 function TerraDrawWalkingDistance({
     draw,
     onWalkingDistance,
+    analysisEnabled
 }) {
     useEffect(() => {
+        if (!analysisEnabled) {
+            onWalkingDistance(null);
+            return;
+        }
+
         if (!draw) return;
 
         let timeoutId = null;
@@ -203,8 +209,7 @@ function TerraDrawWalkingDistance({
 
                     destination,
 
-                    hasRoute:
-                        path.length > 1,
+                    hasRoute: path.length > 1,
                 });
             } catch (error) {
                 console.error(
@@ -273,7 +278,11 @@ function TerraDrawWalkingDistance({
                 handleFinish
             );
         };
-    }, [draw, onWalkingDistance]);
+    }, [
+        draw,
+        analysisEnabled,
+        onWalkingDistance
+    ]);
 
     return null;
 }

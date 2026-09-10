@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Polygon, InfoWindow } from '@vis.gl/react-google-maps';
 import { areaAcres } from './utils'; 
+import { polygon as turfPolygon } from "@turf/helpers";
 
 function HoverablePolygon({ polygon, onHoverChange }) {
     const [isHovered, setIsHovered] = useState(true);
@@ -69,4 +70,54 @@ export function ParkingLayer({ polygons, onHoverChange }) {
             ))}
         </>
     );
+}
+
+
+export function parkingPolygonToTurf(parkingPolygon) {
+    if (!parkingPolygon?.paths?.length) {
+        return null;
+    }
+
+    /*
+     * paths[0] = outer ring
+     * paths[1+] = holes
+     */
+    const rings = parkingPolygon.paths.map((ring) => {
+        const coordinates = ring.map(({ lng, lat }) => [
+            lng,
+            lat,
+        ]);
+
+        /*
+         * Turf requires closed rings.
+         */
+        if (coordinates.length > 0) {
+            const first = coordinates[0];
+            const last = coordinates[coordinates.length - 1];
+
+            if (
+                first[0] !== last[0] ||
+                first[1] !== last[1]
+            ) {
+                coordinates.push([...first]);
+            }
+        }
+
+        return coordinates;
+    });
+
+    if (!rings[0] || rings[0].length < 4) {
+        return null;
+    }
+
+    try {
+        return turfPolygon(rings);
+    } catch (error) {
+        console.warn(
+            "Unable to convert parking polygon to Turf:",
+            error
+        );
+
+        return null;
+    }
 }
