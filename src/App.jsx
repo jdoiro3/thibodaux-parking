@@ -5,7 +5,8 @@ import {
     MapControl,
     ControlPosition,
     Polyline,
-    AdvancedMarker
+    AdvancedMarker,
+    Polygon
 } from "@vis.gl/react-google-maps";
 
 import DrawingControls from "./drawing-controls";
@@ -24,6 +25,7 @@ import { union } from "@turf/union";
 
 const THIBODAUX = { lat: 29.7958, lng: -90.8195 };
 const GEOJSON_URL = `${import.meta.env.BASE_URL}data/thib-parking-lots.geojson`;
+const CITY_LIMITS_URL = `${import.meta.env.BASE_URL}data/thib-city-limits.geojson`;
 
 const SQ_METERS_PER_ACRE = 4046.8564224;
 
@@ -372,6 +374,8 @@ function TerraDrawAnalysis({
 
 function AnalysisCard({
     totalParkingAcres,
+    totalCityAcres,
+    cityParkingPercent,
     polygonCount,
     analysis,
     walkingDistance,
@@ -394,45 +398,105 @@ function AnalysisCard({
                 CITYWIDE PARKING TOTAL
                 ============================================ */}
 
-            <div
-                style={{
-                    fontSize: "11px",
-                    color: "#666",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.05em",
-                    marginBottom: "4px",
-                }}
-            >
-                Total Parking Area
+            <div>
+                <div
+                    style={{
+                        fontSize: "11px",
+                        color: "#666",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        marginBottom: "4px",
+                    }}
+                >
+                    Total Parking Area
+                </div>
+
+                <div
+                    style={{
+                        fontSize: "26px",
+                        fontWeight: "700",
+                        lineHeight: "1.1",
+                    }}
+                >
+                    {totalParkingAcres.toFixed(1)}
+                </div>
+
+                <div
+                    style={{
+                        fontSize: "12px",
+                        color: "#666",
+                    }}
+                >
+                    acres
+                </div>
+
+                <div
+                    style={{
+                        fontSize: "11px",
+                        color: "#888",
+                        marginTop: "4px",
+                    }}
+                >
+                    {polygonCount.toLocaleString()} polygons
+                </div>
             </div>
 
             <div
                 style={{
-                    fontSize: "26px",
-                    fontWeight: "700",
-                    lineHeight: "1.1",
+                    marginTop: "12px",
+                    paddingTop: "10px",
+                    borderTop: "1px solid #ddd",
                 }}
             >
-                {totalParkingAcres.toFixed(1)}
-            </div>
+                <div
+                    style={{
+                        fontSize: "11px",
+                        color: "#666",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        marginBottom: "4px",
+                    }}
+                >
+                    City Area
+                </div>
 
-            <div
-                style={{
-                    fontSize: "12px",
-                    color: "#666",
-                }}
-            >
-                acres
-            </div>
+                <div
+                    style={{
+                        fontSize: "20px",
+                        fontWeight: "700",
+                        lineHeight: "1.1",
+                    }}
+                >
+                    {totalCityAcres.toFixed(1)}
+                </div>
 
-            <div
-                style={{
-                    fontSize: "11px",
-                    color: "#888",
-                    marginTop: "4px",
-                }}
-            >
-                {polygonCount.toLocaleString()} polygons
+                <div
+                    style={{
+                        fontSize: "12px",
+                        color: "#666",
+                    }}
+                >
+                    acres
+                </div>
+
+                <div
+                    style={{
+                        marginTop: "8px",
+                        fontSize: "18px",
+                        fontWeight: "700",
+                    }}
+                >
+                    {cityParkingPercent.toFixed(1)}%
+                </div>
+
+                <div
+                    style={{
+                        fontSize: "11px",
+                        color: "#666",
+                    }}
+                >
+                    of city area is off-street parking
+                </div>
             </div>
 
 
@@ -613,11 +677,12 @@ function AppContent() {
     const [polygons, setPolygons] = useState([]);
     const handleGeoJsonImport = (geojson) => {
         const importedPolygons = extractPolygons(geojson);
-
         setPolygons(importedPolygons);
     };
     const [analysisEnabled, setAnalysisEnabled] = useState(false);
     const [hoveredArea, setHoveredArea] = useState(0);
+    const [cityLimits, setCityLimits] = useState([]);
+    const [cityLimitsLoaded, setCityLimitsLoaded] = useState(false);
 
     const [drawAnalysis, setDrawAnalysis] = useState({
         drawnAcres: 0,
@@ -627,13 +692,13 @@ function AppContent() {
     });
 
     const [walkingDistance, setWalkingDistance] = useState({
-            distanceMeters: 0,
-            durationSeconds: 0,
-            path: [],
-            center: null,
-            destination: null,
-            hasRoute: false,
-        });
+        distanceMeters: 0,
+        durationSeconds: 0,
+        path: [],
+        center: null,
+        destination: null,
+        hasRoute: false,
+    });
 
     /*
      * Load parking GeoJSON.
@@ -653,11 +718,7 @@ function AppContent() {
             })
             .then((geojson) => {
                 if (cancelled) return;
-
-                setPolygons(
-                    extractPolygons(geojson)
-                );
-
+                setPolygons(extractPolygons(geojson));
                 setGeoJsonLoaded(true);
             })
             .catch((error) => {
@@ -677,13 +738,48 @@ function AppContent() {
     }, []);
 
     /*
+    * Load city limits GeoJSON.
+    */
+    useEffect(() => {
+        let cancelled = false;
+
+        fetch(CITY_LIMITS_URL)
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(
+                        `City limits GeoJSON request failed: ${response.status}`
+                    );
+                }
+
+                return response.json();
+            })
+            .then((geojson) => {
+                if (cancelled) return;
+
+                setCityLimits(extractPolygons(geojson));
+                setCityLimitsLoaded(true);
+            })
+            .catch((error) => {
+                console.error(
+                    "Unable to load city limits GeoJSON:",
+                    error
+                );
+
+                if (!cancelled) {
+                    setCityLimitsLoaded(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [geoJsonLoaded]);
+
+    /*
      * Calculate total acreage of ALL parking polygons.
      */
     const totalParkingAcres = useMemo(() => {
-        if (
-            !geoJsonLoaded ||
-            !polygons.length
-        ) {
+        if (!polygons.length) {
             return 0;
         }
 
@@ -698,7 +794,44 @@ function AppContent() {
             },
             0
         );
-    }, [polygons, geoJsonLoaded]);
+    }, [polygons]);
+
+    /*
+ * Calculate total acreage inside the city limits.
+ */
+    const totalCityAcres = useMemo(() => {
+        if (!cityLimits.length) {
+            return 0;
+        }
+
+        return cityLimits.reduce(
+            (total, polygon) => {
+                return (
+                    total +
+                    areaAcres(polygon.paths)
+                );
+            },
+            0
+        );
+    }, [cityLimits]);
+
+    /*
+     * Calculate the percentage of the city occupied by
+     * off-street parking.
+     */
+    const cityParkingPercent = useMemo(() => {
+        if (
+            totalCityAcres <= 0 ||
+            totalParkingAcres <= 0
+        ) {
+            return 0;
+        }
+
+        return (
+            totalParkingAcres /
+            totalCityAcres
+        ) * 100;
+    }, [totalParkingAcres, totalCityAcres]);
 
     return (
         <Map
@@ -831,11 +964,33 @@ function AppContent() {
             >
                 <AnalysisCard
                     totalParkingAcres={totalParkingAcres}
+                    totalCityAcres={totalCityAcres}
+                    cityParkingPercent={cityParkingPercent}
                     polygonCount={polygons.length}
                     analysis={drawAnalysis}
                     walkingDistance={walkingDistance}
                 />
             </MapControl>
+
+            {/* ============================================
+                CITY LIMITS
+                ============================================ */}
+
+            {cityLimits.map((polygon, index) => (
+                <Polygon
+                    key={`city-limit-${index}`}
+                    paths={polygon.paths}
+                    options={{
+                        fillColor: "#ffffff",
+                        fillOpacity: 0.04,
+                        strokeColor: "#ffffff",
+                        strokeOpacity: 0.85,
+                        strokeWeight: 2,
+                        clickable: false,
+                        zIndex: 1,
+                    }}
+                />
+            ))}
 
             {/* ============================================
                 PARKING POLYGONS
