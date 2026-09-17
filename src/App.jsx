@@ -14,8 +14,7 @@ import GeoJsonControls from "./geojson-controls";
 import TerraDrawLayer from "./terra-draw-layer";
 import "./terra-draw.css";
 
-import { ParkingLayer, parkingPolygonToTurf } from "./polygons";
-import { areaAcres } from "./utils";
+import { ParkingLayer, parkingPolygonToTurf, combineCityLimitPolygons } from "./polygons";
 import { TerraDrawWalkingDistance } from './walking-distance'
 
 import turfArea from "@turf/area";
@@ -97,11 +96,6 @@ function extractPolygons(geojson) {
 
     return polygons;
 }
-
-
-/* ============================================================
-   COMBINE PARKING POLYGONS
-   ============================================================ */
 
 function combineParkingPolygons(parkingPolygons) {
     const turfPolygons = [];
@@ -776,61 +770,82 @@ function AppContent() {
     }, [geoJsonLoaded]);
 
     /*
-     * Calculate total acreage of ALL parking polygons.
+     * Combine parking polygons first so overlapping parking
+     * polygons are not counted twice.
      */
-    const totalParkingAcres = useMemo(() => {
-        if (!polygons.length) {
-            return 0;
-        }
-
-        return polygons.reduce(
-            (total, polygon) => {
-                return (
-                    total +
-                    areaAcres(
-                        polygon.paths
-                    )
-                );
-            },
-            0
-        );
+    const combinedParkingFeature = useMemo(() => {
+        return combineParkingPolygons(polygons);
     }, [polygons]);
 
     /*
- * Calculate total acreage inside the city limits.
- */
+     * Convert and combine the city-limit polygon(s) into
+     * a Turf feature for spatial calculations.
+     */
+    console.log("Combining city limits polygons...")
+    const combinedCityLimitsFeature = useMemo(() => {
+        return combineCityLimitPolygons(cityLimits);
+    }, [cityLimits]);
+    console.log(`CityLimits: ${cityLimits}.`)
+
+    /*
+     * Calculate total municipal area.
+     */
+    console.log("Calculating total city limits area...")
     const totalCityAcres = useMemo(() => {
-        if (!cityLimits.length) {
+        if (!combinedCityLimitsFeature) {
             return 0;
         }
 
-        return cityLimits.reduce(
-            (total, polygon) => {
-                return (
-                    total +
-                    areaAcres(polygon.paths)
-                );
-            },
-            0
-        );
-    }, [cityLimits]);
+        return turfArea(combinedCityLimitsFeature) / SQ_METERS_PER_ACRE;
+    }, [combinedCityLimitsFeature]);
+    console.log(`totalCityAcres: ${totalCityAcres}`)
+
+    /*
+     * Calculate parking acreage INSIDE the city limits.
+     *
+     * Completely inside = full area.
+     * Crossing boundary = only the inside portion.
+     * Completely outside = excluded.
+     */
+    const totalParkingAcres = useMemo(() => {
+        if (!combinedParkingFeature || !combinedCityLimitsFeature) {
+            return 0;
+        }
+
+        try {
+            console.log("Calculating total parking inside city limits...")
+            const parkingInsideCity = intersect(
+                featureCollection([
+                    combinedParkingFeature,
+                    combinedCityLimitsFeature,
+                ])
+            );
+            console.log(`Total parking inside city limits is: ${parkingInsideCity}`)
+
+            if (!parkingInsideCity) {
+                return 0;
+            }
+
+            return turfArea(parkingInsideCity) / SQ_METERS_PER_ACRE;
+        } catch (error) {
+            console.error(
+                "Unable to calculate parking inside city limits:",
+                error
+            );
+            return 0;
+        }
+    }, [combinedParkingFeature, combinedCityLimitsFeature]);
 
     /*
      * Calculate the percentage of the city occupied by
      * off-street parking.
      */
     const cityParkingPercent = useMemo(() => {
-        if (
-            totalCityAcres <= 0 ||
-            totalParkingAcres <= 0
-        ) {
+        if (totalCityAcres <= 0) {
             return 0;
         }
 
-        return (
-            totalParkingAcres /
-            totalCityAcres
-        ) * 100;
+        return (totalParkingAcres / totalCityAcres) * 100;
     }, [totalParkingAcres, totalCityAcres]);
 
     return (

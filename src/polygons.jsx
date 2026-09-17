@@ -3,6 +3,7 @@ import { Polygon, InfoWindow } from '@vis.gl/react-google-maps';
 import { areaAcres } from './utils'; 
 import { polygon as turfPolygon } from "@turf/helpers";
 
+
 function HoverablePolygon({ polygon, onHoverChange }) {
     const [isHovered, setIsHovered] = useState(true);
     const [hoverPosition, setHoverPosition] = useState(null);
@@ -26,6 +27,7 @@ function HoverablePolygon({ polygon, onHoverChange }) {
                     const latLng = e.latLng ? e.latLng.toJSON() : null;
                     setHoverPosition(latLng);
                     onHoverChange(acres);
+
                 }}
                 onMouseOut={() => {
                     setIsHovered(false);
@@ -50,6 +52,8 @@ function HoverablePolygon({ polygon, onHoverChange }) {
                         <div style={{ marginTop: '2px', color: '#666' }}>
                             {/* Displaying the calculated value inside the label */}
                             Size: {acres.toFixed(2)} acres
+                            <br></br>
+                            Id: {polygon.properties.id}
                         </div>
                     </div>
                 </InfoWindow>
@@ -57,6 +61,7 @@ function HoverablePolygon({ polygon, onHoverChange }) {
         </>
     );
 }
+
 
 export function ParkingLayer({ polygons, onHoverChange }) {
     return (
@@ -120,4 +125,56 @@ export function parkingPolygonToTurf(parkingPolygon) {
 
         return null;
     }
+}
+
+
+export function googlePathsToTurfPolygon(paths) {
+    if (!paths || !paths.length) return null;
+
+    const coordinates = paths.map((ring) =>
+        ring.map((point) => [Number(point.lng), Number(point.lat)])
+    );
+
+    for (const ring of coordinates) {
+        if (ring.length < 3) continue;
+        const first = ring[0];
+        const last = ring[ring.length - 1];
+
+        if (first[0] !== last[0] || first[1] !== last[1]) {
+            ring.push([...first]);
+        }
+    }
+
+    if (coordinates[0]?.length < 4) return null;
+
+    return {
+        type: "Feature",
+        properties: {},
+        geometry: { type: "Polygon", coordinates },
+    };
+}
+
+
+export function combineCityLimitPolygons(cityLimitPolygons) {
+    const turfPolygons = cityLimitPolygons
+        .map((polygon) => googlePathsToTurfPolygon(polygon.paths))
+        .filter(Boolean);
+
+    if (!turfPolygons.length) return null;
+
+    let combined = turfPolygons[0];
+
+    for (let i = 1; i < turfPolygons.length; i++) {
+        try {
+            const result = union(
+                featureCollection([combined, turfPolygons[i]])
+            );
+
+            if (result) combined = result;
+        } catch (error) {
+            console.warn("Unable to combine city-limit polygons:", error);
+        }
+    }
+
+    return combined;
 }
