@@ -14,7 +14,7 @@ import GeoJsonControls from "./geojson-controls";
 import TerraDrawLayer from "./terra-draw-layer";
 import "./terra-draw.css";
 
-import { ParkingLayer, parkingPolygonToTurf, combineCityLimitPolygons } from "./polygons";
+import { ParkingLayer, extractPolygons, combineParkingPolygons, combineCityLimitPolygons, combineCommercialPolygons } from "./polygons";
 import { TerraDrawWalkingDistance } from './walking-distance'
 
 import turfArea from "@turf/area";
@@ -23,126 +23,12 @@ import { intersect } from "@turf/intersect";
 import { union } from "@turf/union";
 
 const THIBODAUX = { lat: 29.7958, lng: -90.8195 };
+
 const GEOJSON_URL = `${import.meta.env.BASE_URL}data/thib-parking-lots.geojson`;
 const CITY_LIMITS_URL = `${import.meta.env.BASE_URL}data/thib-city-limits.geojson`;
+const COMMERCIAL_ZONES_URL = `${import.meta.env.BASE_URL}data/thib-commercial-zones.geojson`;
 
 const SQ_METERS_PER_ACRE = 4046.8564224;
-
-
-/* ============================================================
-   GEOJSON → GOOGLE MAPS POLYGONS
-   ============================================================ */
-
-function normalizeRing(ring) {
-    return ring.map(([lng, lat]) => ({
-        lat,
-        lng,
-    }));
-}
-
-
-function extractPolygons(geojson) {
-    const polygons = [];
-
-    const addGeometry = (geometry, properties = {}) => {
-        if (!geometry) return;
-
-        if (geometry.type === "Polygon") {
-            const rings = geometry.coordinates || [];
-
-            if (rings.length && rings[0].length >= 3) {
-                polygons.push({
-                    paths: rings.map(normalizeRing),
-                    properties,
-                    geometryType: "Polygon",
-                });
-            }
-        }
-
-        /*
-         * MultiPolygon
-         *
-         * Each polygon can contain an outer ring
-         * and zero or more holes.
-         */
-        if (geometry.type === "MultiPolygon") {
-            for (const polygon of geometry.coordinates || []) {
-                if (polygon?.[0]?.length >= 3) {
-                    polygons.push({
-                        paths: polygon.map(normalizeRing),
-                        properties,
-                        geometryType: "Polygon",
-                    });
-                }
-            }
-        }
-    };
-
-    if (geojson.type === "FeatureCollection") {
-        for (const feature of geojson.features || []) {
-            addGeometry(
-                feature.geometry,
-                feature.properties || {}
-            );
-        }
-    } else if (geojson.type === "Feature") {
-        addGeometry(
-            geojson.geometry,
-            geojson.properties || {}
-        );
-    } else {
-        addGeometry(geojson, {});
-    }
-
-    return polygons;
-}
-
-function combineParkingPolygons(parkingPolygons) {
-    const turfPolygons = [];
-
-    for (const parkingPolygon of parkingPolygons) {
-        const turfFeature =
-            parkingPolygonToTurf(parkingPolygon);
-
-        if (turfFeature) {
-            turfPolygons.push(turfFeature);
-        }
-    }
-
-    if (!turfPolygons.length) {
-        return null;
-    }
-
-    /*
-     * Start with the first polygon and union the rest.
-     *
-     * This prevents overlapping parking polygons from
-     * being counted twice.
-     */
-    let combined = turfPolygons[0];
-
-    for (let i = 1; i < turfPolygons.length; i++) {
-        try {
-            const result = union(
-                featureCollection([
-                    combined,
-                    turfPolygons[i],
-                ])
-            );
-
-            if (result) {
-                combined = result;
-            }
-        } catch (error) {
-            console.warn(
-                "Unable to union parking polygons:",
-                error
-            );
-        }
-    }
-
-    return combined;
-}
 
 
 /* ============================================================
@@ -370,6 +256,9 @@ function AnalysisCard({
     totalParkingAcres,
     totalCityAcres,
     cityParkingPercent,
+    totalCommercialAcres,
+    commercialParkingAcres,
+    commercialParkingPercent,
     polygonCount,
     analysis,
     walkingDistance,
@@ -490,6 +379,74 @@ function AnalysisCard({
                     }}
                 >
                     of city area is off-street parking
+                </div>
+            </div>
+
+            <div
+                style={{
+                    marginTop: "12px",
+                    paddingTop: "10px",
+                    borderTop: "1px solid #ddd",
+                }}
+            >
+                <div
+                    style={{
+                        fontSize: "11px",
+                        color: "#666",
+                        textTransform: "uppercase",
+                        letterSpacing: "0.05em",
+                        marginBottom: "4px",
+                    }}
+                >
+                    Commercial Zones
+                </div>
+
+                <div
+                    style={{
+                        fontSize: "20px",
+                        fontWeight: "700",
+                        lineHeight: "1.1",
+                    }}
+                >
+                    {totalCommercialAcres.toFixed(1)}
+                </div>
+
+                <div
+                    style={{
+                        fontSize: "12px",
+                        color: "#666",
+                    }}
+                >
+                    acres
+                </div>
+
+                <div
+                    style={{
+                        marginTop: "8px",
+                        fontSize: "18px",
+                        fontWeight: "700",
+                    }}
+                >
+                    {commercialParkingPercent.toFixed(1)}%
+                </div>
+
+                <div
+                    style={{
+                        fontSize: "11px",
+                        color: "#666",
+                    }}
+                >
+                    of commercial area is off-street parking
+                </div>
+
+                <div
+                    style={{
+                        marginTop: "4px",
+                        fontSize: "11px",
+                        color: "#888",
+                    }}
+                >
+                    {commercialParkingAcres.toFixed(1)} acres of parking
                 </div>
             </div>
 
@@ -677,6 +634,8 @@ function AppContent() {
     const [hoveredArea, setHoveredArea] = useState(0);
     const [cityLimits, setCityLimits] = useState([]);
     const [cityLimitsLoaded, setCityLimitsLoaded] = useState(false);
+    const [commercialZones, setCommercialZones] = useState([]);
+    const [commercialZonesLoaded, setCommercialZonesLoaded] = useState(false);
 
     const [drawAnalysis, setDrawAnalysis] = useState({
         drawnAcres: 0,
@@ -770,6 +729,44 @@ function AppContent() {
     }, [geoJsonLoaded]);
 
     /*
+ * Load commercial zoning GeoJSON.
+ */
+    useEffect(() => {
+        let cancelled = false;
+
+        fetch(COMMERCIAL_ZONES_URL)
+            .then((response) => {
+                if (!response.ok) {
+                    throw new Error(
+                        `Commercial zones GeoJSON request failed: ${response.status}`
+                    );
+                }
+
+                return response.json();
+            })
+            .then((geojson) => {
+                if (cancelled) return;
+
+                setCommercialZones(extractPolygons(geojson));
+                setCommercialZonesLoaded(true);
+            })
+            .catch((error) => {
+                console.error(
+                    "Unable to load commercial zones GeoJSON:",
+                    error
+                );
+
+                if (!cancelled) {
+                    setCommercialZonesLoaded(false);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    /*
      * Combine parking polygons first so overlapping parking
      * polygons are not counted twice.
      */
@@ -787,6 +784,10 @@ function AppContent() {
     }, [cityLimits]);
     console.log(`CityLimits: ${cityLimits}.`)
 
+    const combinedCommercialZonesFeature = useMemo(() => {
+        return combineCommercialPolygons(commercialZones);
+    }, [commercialZones]);
+
     /*
      * Calculate total municipal area.
      */
@@ -799,6 +800,60 @@ function AppContent() {
         return turfArea(combinedCityLimitsFeature) / SQ_METERS_PER_ACRE;
     }, [combinedCityLimitsFeature]);
     console.log(`totalCityAcres: ${totalCityAcres}`)
+
+    /*
+    * Calculate total commercial-zoned area.
+    */
+    const totalCommercialAcres = useMemo(() => {
+        if (!combinedCommercialZonesFeature) {
+            return 0;
+        }
+
+        return (
+            turfArea(combinedCommercialZonesFeature) /
+            SQ_METERS_PER_ACRE
+        );
+    }, [combinedCommercialZonesFeature]);
+
+    /*
+    * Calculate parking acreage INSIDE commercial zones.
+    */
+    const commercialParkingAcres = useMemo(() => {
+        if (
+            !combinedParkingFeature ||
+            !combinedCommercialZonesFeature
+        ) {
+            return 0;
+        }
+
+        try {
+            const parkingInsideCommercial = intersect(
+                featureCollection([
+                    combinedParkingFeature,
+                    combinedCommercialZonesFeature,
+                ])
+            );
+
+            if (!parkingInsideCommercial) {
+                return 0;
+            }
+
+            return (
+                turfArea(parkingInsideCommercial) /
+                SQ_METERS_PER_ACRE
+            );
+        } catch (error) {
+            console.error(
+                "Unable to calculate parking inside commercial zones:",
+                error
+            );
+
+            return 0;
+        }
+    }, [
+        combinedParkingFeature,
+        combinedCommercialZonesFeature,
+    ]);
 
     /*
      * Calculate parking acreage INSIDE the city limits.
@@ -848,6 +903,21 @@ function AppContent() {
         return (totalParkingAcres / totalCityAcres) * 100;
     }, [totalParkingAcres, totalCityAcres]);
 
+    const commercialParkingPercent = useMemo(() => {
+        if (totalCommercialAcres <= 0) {
+            return 0;
+        }
+
+        return (
+            (commercialParkingAcres /
+                totalCommercialAcres) *
+            100
+        );
+    }, [
+        commercialParkingAcres,
+        totalCommercialAcres,
+    ]);
+
     return (
         <Map
             id="thibodaux-map"
@@ -886,9 +956,7 @@ function AppContent() {
                         />
 
                         <MapControl
-                            position={
-                                ControlPosition.TOP_LEFT
-                            }
+                            position={ControlPosition.LEFT_TOP}
                         >
                             <div className="terra-draw-toolbar">
                                 <DrawingControls
@@ -981,6 +1049,9 @@ function AppContent() {
                     totalParkingAcres={totalParkingAcres}
                     totalCityAcres={totalCityAcres}
                     cityParkingPercent={cityParkingPercent}
+                    totalCommercialAcres={totalCommercialAcres}
+                    commercialParkingAcres={commercialParkingAcres}
+                    commercialParkingPercent={commercialParkingPercent}
                     polygonCount={polygons.length}
                     analysis={drawAnalysis}
                     walkingDistance={walkingDistance}
@@ -1003,6 +1074,26 @@ function AppContent() {
                         strokeWeight: 2,
                         clickable: false,
                         zIndex: 1,
+                    }}
+                />
+            ))}
+
+            {/* ============================================
+            COMMERCIAL ZONES
+            ============================================ */}
+
+            {commercialZones.map((polygon, index) => (
+                <Polygon
+                    key={`commercial-zone-${index}`}
+                    paths={polygon.paths}
+                    options={{
+                        fillColor: "#f36740",
+                        fillOpacity: 0.15,
+                        strokeColor: "#f36740",
+                        strokeOpacity: 0.6,
+                        strokeWeight: 1.5,
+                        clickable: false,
+                        zIndex: 2,
                     }}
                 />
             ))}

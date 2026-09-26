@@ -182,3 +182,30 @@
     border-right-color: var(--border);
   }
 }
+
+.terra-draw-toolbar {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+@media (max-width: 600px) {
+    .terra-draw-toolbar {
+        flex-direction: row;
+        flex-wrap: wrap;
+        gap: 4px;
+        max-width: calc(100vw - 20px);
+    }
+}
+
+
+.analysis-card {
+    width: 320px;
+}
+
+@media (max-width: 600px) {
+    .analysis-card {
+        width: calc(100vw - 24px);
+        max-width: none;
+    }
+}

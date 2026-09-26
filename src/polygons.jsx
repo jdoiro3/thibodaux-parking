@@ -178,3 +178,166 @@ export function combineCityLimitPolygons(cityLimitPolygons) {
 
     return combined;
 }
+
+
+export function combineCommercialPolygons(commercialPolygons) {
+    if (!commercialPolygons.length) {
+        return null;
+    }
+
+    const turfPolygons = commercialPolygons
+        .map((polygon) => {
+            const coordinates = polygon.paths.map((ring) =>
+                ring.map(({ lng, lat }) => [lng, lat])
+            );
+
+            return {
+                type: "Feature",
+                properties: {},
+                geometry: {
+                    type: "Polygon",
+                    coordinates,
+                },
+            };
+        });
+
+    let combined = turfPolygons[0];
+
+    for (let i = 1; i < turfPolygons.length; i++) {
+        try {
+            const result = union(
+                featureCollection([
+                    combined,
+                    turfPolygons[i],
+                ])
+            );
+
+            if (result) {
+                combined = result;
+            }
+        } catch (error) {
+            console.warn(
+                "Unable to union commercial zone polygons:",
+                error
+            );
+        }
+    }
+
+    return combined;
+}
+
+
+/* ============================================================
+   GEOJSON → GOOGLE MAPS POLYGONS
+   ============================================================ */
+
+export function normalizeRing(ring) {
+    return ring.map(([lng, lat]) => ({
+        lat,
+        lng,
+    }));
+}
+
+
+export function extractPolygons(geojson) {
+    const polygons = [];
+
+    const addGeometry = (geometry, properties = {}) => {
+        if (!geometry) return;
+
+        if (geometry.type === "Polygon") {
+            const rings = geometry.coordinates || [];
+
+            if (rings.length && rings[0].length >= 3) {
+                polygons.push({
+                    paths: rings.map(normalizeRing),
+                    properties,
+                    geometryType: "Polygon",
+                });
+            }
+        }
+
+        /*
+         * MultiPolygon
+         *
+         * Each polygon can contain an outer ring
+         * and zero or more holes.
+         */
+        if (geometry.type === "MultiPolygon") {
+            for (const polygon of geometry.coordinates || []) {
+                if (polygon?.[0]?.length >= 3) {
+                    polygons.push({
+                        paths: polygon.map(normalizeRing),
+                        properties,
+                        geometryType: "Polygon",
+                    });
+                }
+            }
+        }
+    };
+
+    if (geojson.type === "FeatureCollection") {
+        for (const feature of geojson.features || []) {
+            addGeometry(
+                feature.geometry,
+                feature.properties || {}
+            );
+        }
+    } else if (geojson.type === "Feature") {
+        addGeometry(
+            geojson.geometry,
+            geojson.properties || {}
+        );
+    } else {
+        addGeometry(geojson, {});
+    }
+
+    return polygons;
+}
+
+export function combineParkingPolygons(parkingPolygons) {
+    const turfPolygons = [];
+
+    for (const parkingPolygon of parkingPolygons) {
+        const turfFeature =
+            parkingPolygonToTurf(parkingPolygon);
+
+        if (turfFeature) {
+            turfPolygons.push(turfFeature);
+        }
+    }
+
+    if (!turfPolygons.length) {
+        return null;
+    }
+
+    /*
+     * Start with the first polygon and union the rest.
+     *
+     * This prevents overlapping parking polygons from
+     * being counted twice.
+     */
+    let combined = turfPolygons[0];
+
+    for (let i = 1; i < turfPolygons.length; i++) {
+        try {
+            const result = union(
+                featureCollection([
+                    combined,
+                    turfPolygons[i],
+                ])
+            );
+
+            if (result) {
+                combined = result;
+            }
+        } catch (error) {
+            console.warn(
+                "Unable to union parking polygons:",
+                error
+            );
+        }
+    }
+
+    return combined;
+}
