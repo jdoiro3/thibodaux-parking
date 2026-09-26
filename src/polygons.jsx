@@ -2,6 +2,8 @@ import React, { useState, useMemo } from 'react';
 import { Polygon, InfoWindow } from '@vis.gl/react-google-maps';
 import { areaAcres } from './utils'; 
 import { polygon as turfPolygon } from "@turf/helpers";
+import { union } from "@turf/union";
+import { featureCollection } from "@turf/helpers";
 
 
 function HoverablePolygon({ polygon, onHoverChange }) {
