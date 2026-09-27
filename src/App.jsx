@@ -782,7 +782,6 @@ function AppContent() {
     const combinedCityLimitsFeature = useMemo(() => {
         return combineCityLimitPolygons(cityLimits);
     }, [cityLimits]);
-    console.log(`CityLimits: ${cityLimits}.`)
 
     const combinedCommercialZonesFeature = useMemo(() => {
         return combineCommercialPolygons(commercialZones);
@@ -804,6 +803,7 @@ function AppContent() {
     /*
     * Calculate total commercial-zoned area.
     */
+    console.log("Calculating total commercial zone area...")
     const totalCommercialAcres = useMemo(() => {
         if (!combinedCommercialZonesFeature) {
             return 0;
@@ -814,10 +814,12 @@ function AppContent() {
             SQ_METERS_PER_ACRE
         );
     }, [combinedCommercialZonesFeature]);
+    console.log(`totalCommercialAcres: ${totalCommercialAcres}`)
 
     /*
     * Calculate parking acreage INSIDE commercial zones.
     */
+    console.log("Calculating total parking in commercial areas...")
     const commercialParkingAcres = useMemo(() => {
         if (
             !combinedParkingFeature ||
@@ -854,6 +856,7 @@ function AppContent() {
         combinedParkingFeature,
         combinedCommercialZonesFeature,
     ]);
+    console.log(`commercialParkingAcres: ${commercialParkingAcres}.`)
 
     /*
      * Calculate parking acreage INSIDE the city limits.
@@ -1091,7 +1094,7 @@ function AppContent() {
                         fillOpacity: 0.15,
                         strokeColor: "#f36740",
                         strokeOpacity: 0.6,
-                        strokeWeight: 1.5,
+                        strokeWeight: 2,
                         clickable: false,
                         zIndex: 2,
                     }}
